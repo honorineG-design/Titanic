@@ -157,8 +157,15 @@
     initCursor();
 
     (async () => {
-      const user = await requireAuth();
-      if (!user) return;
+      const token = getToken();
+      const user  = getUser();
+      console.log('Token:', token ? 'exists' : 'MISSING');
+      console.log('User:', user);
+      if (!token || !user) {
+        console.log('No token/user → redirecting to login');
+        window.location.href = 'login.html';
+        return;
+      }
       document.getElementById('navUsername').textContent = user.username;
     })();
 
