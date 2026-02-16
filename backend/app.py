@@ -25,7 +25,8 @@ ALLOWED_ORIGINS = [
     'http://localhost:5500',
     'http://127.0.0.1:5500',
     'null',
-    os.environ.get('FRONTEND_URL', ''),
+    'https://honorineg-design.github.io',            
+    os.environ.get('FRONTEND_URL', ''),              
 ]
 CORS(app, supports_credentials=True, origins=[o for o in ALLOWED_ORIGINS if o])
 
@@ -108,6 +109,7 @@ def register():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
+    # Admin login check
     if data.get('username') == ADMIN_USERNAME and data.get('password') == ADMIN_PASSWORD:
         admin = User.query.filter_by(username=ADMIN_USERNAME).first()
         if not admin:
@@ -139,7 +141,6 @@ def status():
     if current_user.is_authenticated:
         return jsonify({'authenticated': True, 'username': current_user.username, 'is_admin': current_user.is_admin})
     return jsonify({'authenticated': False})
-
 
 @app.route('/api/predict', methods=['POST'])
 @login_required

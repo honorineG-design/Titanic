@@ -42,27 +42,25 @@ body {
   z-index: 9999;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  transition: opacity 0.3s;
+  transition: opacity 0.2s;
 }
 .cursor-dot {
-  width: 6px; height: 6px;
+  width: 4px; height: 4px;
   background: var(--accent);
-  transition: transform 0.1s;
+  transition: transform 0.08s;
 }
 .cursor-ring {
-  width: 32px; height: 32px;
-  border: 1px solid var(--accent);
-  opacity: 0.5;
-  transition: transform 0.12s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-              width 0.25s, height 0.25s, opacity 0.25s;
+  width: 18px; height: 18px;
+  border: 1px solid rgba(200,169,126,0.6);
+  opacity: 1;
+  transition: width 0.15s ease, height 0.15s ease, border-color 0.15s ease;
 }
 body:has(a:hover) .cursor-ring,
 body:has(button:hover) .cursor-ring,
 body:has(input:hover) .cursor-ring,
 body:has(select:hover) .cursor-ring {
-  width: 50px; height: 50px;
-  opacity: 0.8;
-  border-color: var(--accent2);
+  width: 26px; height: 26px;
+  border-color: var(--accent);
 }
 
 .bg-grid {
