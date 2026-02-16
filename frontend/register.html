@@ -86,6 +86,8 @@
       txtEl.style.display = 'inline'; loader.style.display = 'none'; btn.disabled = false;
 
       if (res.ok) {
+        setToken(res.data.token);
+        setUser({ username: res.data.username, is_admin: false });
         msgBox.className = 'msg-box success';
         msgBox.textContent = '✓ Account created! Redirecting…';
         setTimeout(() => window.location.href = 'index.html', 1200);

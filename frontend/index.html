@@ -157,19 +157,17 @@
     initCursor();
 
     (async () => {
-      const res  = await fetch(`${API_BASE}/api/status`, { credentials: 'include' });
-      const data = await res.json();
-      if (!data.authenticated) return window.location.href = 'login.html';
-      document.getElementById('navUsername').textContent = data.username;
+      const user = await requireAuth();
+      if (!user) return;
+      document.getElementById('navUsername').textContent = user.username;
     })();
 
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await apiCall('/api/logout', {});
-      window.location.href = 'login.html';
-    });
+    document.getElementById('logoutBtn').addEventListener('click', doLogout);
 
     async function loadHistory() {
-      const res  = await fetch(`${API_BASE}/api/history`, { credentials: 'include' });
+      const res  = await fetch(`${API_BASE}/api/history`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
       const data = await res.json();
       const list = document.getElementById('historyList');
       if (!Array.isArray(data) || !data.length) {

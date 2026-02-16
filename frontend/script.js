@@ -1,18 +1,69 @@
 const API_BASE = 'https://titanic-production-ffa9.up.railway.app';
 
+function getToken()        { return localStorage.getItem('ts_token'); }
+function setToken(t)       { localStorage.setItem('ts_token', t); }
+function removeToken()     { localStorage.removeItem('ts_token'); localStorage.removeItem('ts_user'); }
+function setUser(u)        { localStorage.setItem('ts_user', JSON.stringify(u)); }
+function getUser()         { try { return JSON.parse(localStorage.getItem('ts_user')); } catch { return null; } }
+
 async function apiCall(endpoint, body = {}, method = 'POST') {
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(body)
-    });
+    const headers = { 'Content-Type': 'application/json' };
+    const token = getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const options = { method, headers };
+    if (method !== 'GET') options.body = JSON.stringify(body);
+
+    const res  = await fetch(`${API_BASE}${endpoint}`, options);
     const data = await res.json();
     return { ok: res.ok, data, status: res.status };
   } catch (err) {
     return { ok: false, data: { error: 'Cannot reach server. Is Flask running?' } };
   }
+}
+
+async function requireAuth(redirectIfAdmin = false) {
+  const token = getToken();
+  if (!token) { window.location.href = 'login.html'; return null; }
+
+  const res = await fetch(`${API_BASE}/api/status`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+
+  if (!data.authenticated) {
+    removeToken();
+    window.location.href = 'login.html';
+    return null;
+  }
+  if (redirectIfAdmin && data.is_admin) {
+    window.location.href = 'admin.html';
+    return null;
+  }
+  return data;
+}
+
+async function requireAdmin() {
+  const token = getToken();
+  if (!token) { window.location.href = 'login.html'; return null; }
+
+  const res  = await fetch(`${API_BASE}/api/status`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+
+  if (!data.authenticated || !data.is_admin) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  return data;
+}
+
+async function doLogout() {
+  await apiCall('/api/logout', {});
+  removeToken();
+  window.location.href = 'login.html';
 }
 
 function initCursor() {
@@ -78,10 +129,10 @@ function initParticles() {
     for (let i = 0; i < pts.length; i++) {
       for (let j = i + 1; j < pts.length; j++) {
         const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
-        const d = Math.sqrt(dx * dx + dy * dy);
+        const d  = Math.sqrt(dx * dx + dy * dy);
         if (d < 120) {
           ctx.strokeStyle = `rgba(200,169,126,${(1 - d / 120) * 0.07})`;
-          ctx.lineWidth = 0.5;
+          ctx.lineWidth   = 0.5;
           ctx.beginPath();
           ctx.moveTo(pts[i].x, pts[i].y);
           ctx.lineTo(pts[j].x, pts[j].y);

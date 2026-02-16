@@ -1,16 +1,18 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import joblib
 import numpy as np
 import os
+import jwt
+import datetime
 from functools import wraps
 
 app = Flask(__name__)
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'titanic-survey-2026')
+SECRET_KEY     = os.environ.get('SECRET_KEY', 'titanic-survey-2026')
+app.config['SECRET_KEY'] = SECRET_KEY
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
 if DATABASE_URL.startswith('postgres://'):
@@ -19,19 +21,18 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')   
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 
 ALLOWED_ORIGINS = [
     'http://localhost:5500',
     'http://127.0.0.1:5500',
     'null',
-    'https://honorineg-design.github.io',            
-    os.environ.get('FRONTEND_URL', ''),              
+    'https://honorineg-design.github.io',
+    os.environ.get('FRONTEND_URL', ''),
 ]
-CORS(app, supports_credentials=True, origins=[o for o in ALLOWED_ORIGINS if o])
+CORS(app, origins=[o for o in ALLOWED_ORIGINS if o], supports_credentials=False)
 
-db            = SQLAlchemy(app)
-login_manager = LoginManager(app)
+db = SQLAlchemy(app)
 
 
 class User(db.Model):
@@ -41,11 +42,6 @@ class User(db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     is_admin      = db.Column(db.Boolean, default=False)
     predictions   = db.relationship('Prediction', backref='user', lazy=True, cascade='all, delete-orphan')
-
-    def is_active(self):        return True
-    def is_authenticated(self): return True
-    def is_anonymous(self):     return False
-    def get_id(self):           return str(self.id)
 
 class Prediction(db.Model):
     id          = db.Column(db.Integer, primary_key=True)
@@ -61,16 +57,48 @@ class Prediction(db.Model):
     probability = db.Column(db.Float)
     timestamp   = db.Column(db.DateTime, default=db.func.now())
 
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+
+def create_token(user_id, username, is_admin):
+    payload = {
+        'user_id':  user_id,
+        'username': username,
+        'is_admin': is_admin,
+        'exp':      datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return jsonify({'error': 'Token required'}), 401
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            current_user = User.query.get(data['user_id'])
+            if not current_user:
+                return jsonify({'error': 'User not found'}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token expired, please log in again'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+        return f(current_user, *args, **kwargs)
+    return decorated
 
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.is_admin:
-            return jsonify({'error': 'Admin access required'}), 403
-        return f(*args, **kwargs)
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return jsonify({'error': 'Token required'}), 401
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            if not data.get('is_admin'):
+                return jsonify({'error': 'Admin access required'}), 403
+            current_user = User.query.get(data['user_id'])
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+        return f(current_user, *args, **kwargs)
     return decorated
 
 MODEL_PATH   = os.path.join(os.path.dirname(__file__), 'models', 'titanic_model.pkl')
@@ -83,9 +111,10 @@ def load_model():
     try:
         model       = joblib.load(MODEL_PATH)
         sex_encoder = joblib.load(ENCODER_PATH)
-        print(' Model loaded successfully')
+        print('Model loaded successfully')
     except Exception as e:
         print(f' Model not found: {e}. Run training/train_model.py first.')
+
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -103,13 +132,13 @@ def register():
     )
     db.session.add(user)
     db.session.commit()
-    login_user(user)
-    return jsonify({'message': 'Registered successfully', 'username': user.username}), 201
+    token = create_token(user.id, user.username, user.is_admin)
+    return jsonify({'message': 'Registered successfully', 'username': user.username, 'token': token}), 201
 
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
-    # Admin login check
+
     if data.get('username') == ADMIN_USERNAME and data.get('password') == ADMIN_PASSWORD:
         admin = User.query.filter_by(username=ADMIN_USERNAME).first()
         if not admin:
@@ -121,30 +150,34 @@ def login():
             )
             db.session.add(admin)
             db.session.commit()
-        login_user(admin)
-        return jsonify({'message': 'Admin logged in', 'username': admin.username, 'is_admin': True})
+        token = create_token(admin.id, admin.username, True)
+        return jsonify({'message': 'Admin logged in', 'username': admin.username, 'is_admin': True, 'token': token})
 
     user = User.query.filter_by(username=data.get('username')).first()
     if user and check_password_hash(user.password_hash, data.get('password', '')):
-        login_user(user)
-        return jsonify({'message': 'Logged in', 'username': user.username, 'is_admin': user.is_admin})
+        token = create_token(user.id, user.username, user.is_admin)
+        return jsonify({'message': 'Logged in', 'username': user.username, 'is_admin': user.is_admin, 'token': token})
     return jsonify({'error': 'Invalid credentials'}), 401
 
 @app.route('/api/logout', methods=['POST'])
-@login_required
 def logout():
-    logout_user()
     return jsonify({'message': 'Logged out'})
 
 @app.route('/api/status', methods=['GET'])
 def status():
-    if current_user.is_authenticated:
-        return jsonify({'authenticated': True, 'username': current_user.username, 'is_admin': current_user.is_admin})
-    return jsonify({'authenticated': False})
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return jsonify({'authenticated': False})
+    try:
+        data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        return jsonify({'authenticated': True, 'username': data['username'], 'is_admin': data.get('is_admin', False)})
+    except jwt.InvalidTokenError:
+        return jsonify({'authenticated': False})
+
 
 @app.route('/api/predict', methods=['POST'])
-@login_required
-def predict():
+@token_required
+def predict(current_user):
     if model is None:
         return jsonify({'error': 'Model not loaded. Run train_model.py first.'}), 503
     data = request.get_json()
@@ -176,8 +209,8 @@ def predict():
         return jsonify({'error': str(e)}), 400
 
 @app.route('/api/history', methods=['GET'])
-@login_required
-def history():
+@token_required
+def history(current_user):
     preds = Prediction.query.filter_by(user_id=current_user.id)\
         .order_by(Prediction.timestamp.desc()).limit(10).all()
     return jsonify([{
@@ -192,9 +225,8 @@ def history():
 
 
 @app.route('/api/admin/stats', methods=['GET'])
-@login_required
 @admin_required
-def admin_stats():
+def admin_stats(current_user):
     total_users       = User.query.filter_by(is_admin=False).count()
     total_predictions = Prediction.query.count()
     survived_count    = Prediction.query.filter_by(result='Survived').count()
@@ -208,9 +240,8 @@ def admin_stats():
     })
 
 @app.route('/api/admin/users', methods=['GET'])
-@login_required
 @admin_required
-def admin_users():
+def admin_users(current_user):
     users = User.query.filter_by(is_admin=False).order_by(User.id.desc()).all()
     return jsonify([{
         'id':               u.id,
@@ -220,9 +251,8 @@ def admin_users():
     } for u in users])
 
 @app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
-@login_required
 @admin_required
-def admin_delete_user(user_id):
+def admin_delete_user(current_user, user_id):
     user = User.query.get_or_404(user_id)
     if user.is_admin:
         return jsonify({'error': 'Cannot delete admin'}), 400
@@ -231,9 +261,8 @@ def admin_delete_user(user_id):
     return jsonify({'message': f'User {user.username} deleted'})
 
 @app.route('/api/admin/predictions', methods=['GET'])
-@login_required
 @admin_required
-def admin_predictions():
+def admin_predictions(current_user):
     preds = Prediction.query.order_by(Prediction.timestamp.desc()).limit(50).all()
     return jsonify([{
         'id':          p.id,
@@ -247,18 +276,16 @@ def admin_predictions():
     } for p in preds])
 
 @app.route('/api/admin/predictions/<int:pred_id>', methods=['DELETE'])
-@login_required
 @admin_required
-def admin_delete_prediction(pred_id):
+def admin_delete_prediction(current_user, pred_id):
     pred = Prediction.query.get_or_404(pred_id)
     db.session.delete(pred)
     db.session.commit()
     return jsonify({'message': 'Prediction deleted'})
 
 @app.route('/api/admin/predictions/clear', methods=['DELETE'])
-@login_required
 @admin_required
-def admin_clear_predictions():
+def admin_clear_predictions(current_user):
     Prediction.query.delete()
     db.session.commit()
     return jsonify({'message': 'All predictions cleared'})

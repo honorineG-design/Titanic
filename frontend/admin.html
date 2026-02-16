@@ -335,17 +335,11 @@
     initCursor();
 
     (async () => {
-      const res  = await fetch(`${API_BASE}/api/status`, { credentials: 'include' });
-      const data = await res.json();
-      if (!data.authenticated || !data.is_admin) {
-        window.location.href = 'login.html';
-      }
+      const user = await requireAdmin();
+      if (!user) return;
     })();
 
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await apiCall('/api/logout', {});
-      window.location.href = 'login.html';
-    });
+    document.getElementById('logoutBtn').addEventListener('click', doLogout);
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -357,7 +351,9 @@
     });
 
     async function loadStats() {
-      const res  = await fetch(`${API_BASE}/api/admin/stats`, { credentials: 'include' });
+      const res  = await fetch(`${API_BASE}/api/admin/stats`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
       const data = await res.json();
       document.getElementById('statUsers').textContent    = data.total_users ?? '—';
       document.getElementById('statPreds').textContent    = data.total_predictions ?? '—';
@@ -366,7 +362,9 @@
     }
 
     async function loadUsers() {
-      const res  = await fetch(`${API_BASE}/api/admin/users`, { credentials: 'include' });
+      const res  = await fetch(`${API_BASE}/api/admin/users`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
       const data = await res.json();
       const body = document.getElementById('usersBody');
       if (!data.length) {
@@ -385,7 +383,9 @@
     }
 
     async function loadPredictions() {
-      const res  = await fetch(`${API_BASE}/api/admin/predictions`, { credentials: 'include' });
+      const res  = await fetch(`${API_BASE}/api/admin/predictions`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
       const data = await res.json();
       const body = document.getElementById('predsBody');
       if (!data.length) {

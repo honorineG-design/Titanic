@@ -1,6 +1,5 @@
 flask
 flask-cors
-flask-login
 flask-sqlalchemy
 pandas
 numpy
@@ -9,3 +8,4 @@ joblib
 gunicorn
 werkzeug
 psycopg2-binary
+PyJWT
