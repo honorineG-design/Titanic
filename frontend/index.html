@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Titanic Survey — Predict</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Josefin+Sans:wght@200;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="cursor-dot"></div>
+  <div class="cursor-ring"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-gradient"></div>
+  <canvas id="particles"></canvas>
+
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-icon-sm">⚓</span>
+      <span class="brand-title-sm">TITANIC <span>SURVEY</span></span>
+    </div>
+    <div class="nav-user">
+      <span id="navUsername" class="nav-username"></span>
+      <button id="logoutBtn" class="btn-ghost">LOGOUT</button>
+    </div>
+  </nav>
+
+  <main class="dashboard">
+
+    <section class="panel panel-form">
+      <div class="panel-header">
+        <h2>Passenger Profile</h2>
+        <p>Enter passenger details to predict survival</p>
+      </div>
+
+      <form id="predictForm" novalidate>
+        <div class="form-grid">
+
+          <div class="field-group">
+            <label>Passenger Class</label>
+            <div class="input-wrap">
+              <select id="pclass">
+                <option value="1">1st Class — Upper</option>
+                <option value="2">2nd Class — Middle</option>
+                <option value="3" selected>3rd Class — Lower</option>
+              </select>
+              <span class="input-line"></span>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Sex</label>
+            <div class="input-wrap">
+              <select id="sex">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+              <span class="input-line"></span>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Age</label>
+            <div class="input-wrap">
+              <input type="number" id="age" placeholder="e.g. 28" min="0" max="100" required/>
+              <span class="input-line"></span>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Fare (£)</label>
+            <div class="input-wrap">
+              <input type="number" id="fare" placeholder="e.g. 32.50" min="0" step="0.01" required/>
+              <span class="input-line"></span>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Siblings / Spouses Aboard</label>
+            <div class="input-wrap">
+              <input type="number" id="sibsp" placeholder="0" min="0" max="8" value="0"/>
+              <span class="input-line"></span>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Parents / Children Aboard</label>
+            <div class="input-wrap">
+              <input type="number" id="parch" placeholder="0" min="0" max="6" value="0"/>
+              <span class="input-line"></span>
+            </div>
+          </div>
+
+          <div class="field-group full-width">
+            <label>Port of Embarkation</label>
+            <div class="input-wrap">
+              <select id="embarked">
+                <option value="S">Southampton (S)</option>
+                <option value="C">Cherbourg (C)</option>
+                <option value="Q">Queenstown (Q)</option>
+              </select>
+              <span class="input-line"></span>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="msg-box" id="msgBox"></div>
+
+        <button type="submit" class="btn-primary btn-wide" id="predictBtn">
+          <span class="btn-text">PREDICT SURVIVAL</span>
+          <span class="btn-loader" style="display:none">◌</span>
+        </button>
+      </form>
+    </section>
+
+    <section class="panel panel-result">
+
+      <div class="result-card" id="resultCard">
+        <div class="result-idle">
+          <div class="result-icon-idle">🚢</div>
+          <p>Your prediction will appear here</p>
+        </div>
+        <div class="result-show" style="display:none">
+          <div class="result-badge" id="resultBadge"></div>
+          <div class="result-prob-ring">
+            <svg viewBox="0 0 100 100" class="ring-svg">
+              <circle class="ring-bg"   cx="50" cy="50" r="42"/>
+              <circle class="ring-fill" cx="50" cy="50" r="42" id="ringFill"/>
+            </svg>
+            <div class="ring-text">
+              <span id="probValue">0%</span>
+              <small>survival chance</small>
+            </div>
+          </div>
+          <p class="result-detail" id="resultDetail"></p>
+        </div>
+      </div>
+
+      <div class="history-panel">
+        <div class="panel-header">
+          <h3>Recent Predictions</h3>
+          <button class="btn-ghost btn-sm" id="refreshHistory">↻ Refresh</button>
+        </div>
+        <div id="historyList" class="history-list">
+          <p class="history-empty">No predictions yet.</p>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+  <script>
+    initParticles();
+    initCursor();
+
+    (async () => {
+      const res  = await fetch(`${API_BASE}/api/status`, { credentials: 'include' });
+      const data = await res.json();
+      if (!data.authenticated) return window.location.href = 'login.html';
+      document.getElementById('navUsername').textContent = data.username;
+    })();
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await apiCall('/api/logout', {});
+      window.location.href = 'login.html';
+    });
+
+    async function loadHistory() {
+      const res  = await fetch(`${API_BASE}/api/history`, { credentials: 'include' });
+      const data = await res.json();
+      const list = document.getElementById('historyList');
+      if (!Array.isArray(data) || !data.length) {
+        list.innerHTML = '<p class="history-empty">No predictions yet.</p>';
+        return;
+      }
+      list.innerHTML = data.map(p => `
+        <div class="history-item ${p.result === 'Survived' ? 'survived' : 'not-survived'}">
+          <div class="hi-meta">
+            <span class="hi-class">Class ${p.pclass}</span>
+            <span class="hi-sex">${p.sex}, Age ${p.age}</span>
+          </div>
+          <div class="hi-result">
+            <span class="hi-badge">${p.result === 'Survived' ? '✓' : '✗'}</span>
+            <span class="hi-prob">${p.probability}%</span>
+          </div>
+          <small class="hi-time">${p.timestamp}</small>
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('refreshHistory').addEventListener('click', loadHistory);
+    loadHistory();
+
+    document.getElementById('predictForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn    = document.getElementById('predictBtn');
+      const txtEl  = btn.querySelector('.btn-text');
+      const loader = btn.querySelector('.btn-loader');
+      const msgBox = document.getElementById('msgBox');
+
+      txtEl.style.display = 'none'; loader.style.display = 'inline'; btn.disabled = true;
+      msgBox.className = 'msg-box'; msgBox.textContent = '';
+
+      const res = await apiCall('/api/predict', {
+        pclass:   +document.getElementById('pclass').value,
+        sex:       document.getElementById('sex').value,
+        age:      +document.getElementById('age').value,
+        fare:     +document.getElementById('fare').value,
+        sibsp:    +document.getElementById('sibsp').value,
+        parch:    +document.getElementById('parch').value,
+        embarked:  document.getElementById('embarked').value
+      });
+
+      txtEl.style.display = 'inline'; loader.style.display = 'none'; btn.disabled = false;
+
+      if (res.ok) {
+        showResult(res.data.result, res.data.probability);
+        loadHistory();
+      } else {
+        msgBox.className = 'msg-box error';
+        msgBox.textContent = res.data.error || 'Prediction failed.';
+      }
+    });
+
+    function showResult(result, prob) {
+      const card    = document.getElementById('resultCard');
+      const survived = result === 'Survived';
+      card.querySelector('.result-idle').style.display = 'none';
+      const show = card.querySelector('.result-show');
+      show.style.display = 'flex';
+
+      const badge = document.getElementById('resultBadge');
+      badge.textContent = survived ? '✓ SURVIVED' : '✗ DID NOT SURVIVE';
+      badge.className = 'result-badge ' + (survived ? 'badge-survived' : 'badge-died');
+      document.getElementById('resultDetail').textContent =
+        survived ? 'This passenger likely made it out alive.'
+                 : 'This passenger likely did not survive.';
+
+      const circumference = 2 * Math.PI * 42;
+      const ring = document.getElementById('ringFill');
+      ring.style.strokeDasharray  = circumference;
+      ring.style.strokeDashoffset = circumference;
+      ring.style.stroke = survived ? '#4ade80' : '#f87171';
+
+      let cur = 0;
+      (function tick() {
+        if (cur < prob) {
+          cur = Math.min(cur + 2, prob);
+          ring.style.strokeDashoffset = circumference - (cur / 100) * circumference;
+          document.getElementById('probValue').textContent = Math.round(cur) + '%';
+          requestAnimationFrame(tick);
+        }
+      })();
+    }
+  </script>
+</body>
+</html>

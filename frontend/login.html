@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — Titanic Survey</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Josefin+Sans:wght@200;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="cursor-dot"></div>
+  <div class="cursor-ring"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-gradient"></div>
+  <canvas id="particles"></canvas>
+
+  <div class="auth-wrapper">
+    <div class="auth-card">
+      <div class="card-glow"></div>
+
+      <div class="brand">
+        <div class="brand-icon">⚓</div>
+        <h1 class="brand-title">TITANIC <span>SURVEY</span></h1>
+        <p class="brand-sub">Survival Prediction Engine</p>
+      </div>
+
+      <h2 class="form-heading">Sign In</h2>
+
+      <form id="loginForm" novalidate>
+        <div class="field-group">
+          <label>Username</label>
+          <div class="input-wrap">
+            <input type="text" id="username" placeholder="your username" autocomplete="off" required/>
+            <span class="input-line"></span>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Password</label>
+          <div class="input-wrap">
+            <input type="password" id="password" placeholder="••••••••" required/>
+            <span class="input-line"></span>
+          </div>
+        </div>
+
+        <div class="msg-box" id="msgBox"></div>
+
+        <button type="submit" class="btn-primary">
+          <span class="btn-text">ENTER</span>
+          <span class="btn-loader" style="display:none">◌</span>
+        </button>
+      </form>
+
+      <p class="switch-link">New here? <a href="register.html">Create account</a></p>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+  <script>
+    initParticles();
+    initCursor();
+
+    document.getElementById('loginForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn    = e.target.querySelector('.btn-primary');
+      const txtEl  = btn.querySelector('.btn-text');
+      const loader = btn.querySelector('.btn-loader');
+      const msgBox = document.getElementById('msgBox');
+
+      txtEl.style.display = 'none'; loader.style.display = 'inline'; btn.disabled = true;
+      msgBox.className = 'msg-box'; msgBox.textContent = '';
+
+      const res = await apiCall('/api/login', {
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value
+      });
+
+      txtEl.style.display = 'inline'; loader.style.display = 'none'; btn.disabled = false;
+
+      if (res.ok) {
+        msgBox.className = 'msg-box success';
+        msgBox.textContent = `✓ Welcome back, ${res.data.username}!`;
+        const dest = res.data.is_admin ? 'admin.html' : 'index.html';
+        setTimeout(() => window.location.href = dest, 1000);
+      } else {
+        msgBox.className = 'msg-box error';
+        msgBox.textContent = res.data.error || 'Login failed.';
+      }
+    });
+  </script>
+</body>
+</html>
