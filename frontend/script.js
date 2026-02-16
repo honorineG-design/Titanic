@@ -1,4 +1,4 @@
-const API_BASE = 'titanic-production-ffa9.up.railway.app';
+const API_BASE = 'https://titanic-production-ffa9.up.railway.app';
 
 async function apiCall(endpoint, body = {}, method = 'POST') {
   try {
