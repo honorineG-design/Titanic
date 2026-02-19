@@ -2,17 +2,32 @@ const IS_LOCAL = window.location.hostname === 'localhost' ||
                  window.location.hostname === '127.0.0.1' ||
                  window.location.protocol === 'file:';
 
-const API_BASE = IS_LOCAL
+  const API_BASE = IS_LOCAL
   ? 'http://127.0.0.1:5000'
-  : 'https://titanic-l2cj.onrender.com';
-
+  : 'https://titanic-l2cj.onrender.com' ;
+  
 console.log('API_BASE:', API_BASE);
 
-function getToken()        { return localStorage.getItem('ts_token'); }
-function setToken(t)       { localStorage.setItem('ts_token', t); }
-function removeToken()     { localStorage.removeItem('ts_token'); localStorage.removeItem('ts_user'); }
-function setUser(u)        { localStorage.setItem('ts_user', JSON.stringify(u)); }
-function getUser()         { try { return JSON.parse(localStorage.getItem('ts_user')); } catch { return null; } }
+function getToken()    { return localStorage.getItem('ts_token'); }
+function setToken(t)   { localStorage.setItem('ts_token', t); }
+function removeToken() { localStorage.removeItem('ts_token'); localStorage.removeItem('ts_user'); }
+function setUser(u)    { localStorage.setItem('ts_user', JSON.stringify(u)); }
+function getUser()     { try { return JSON.parse(localStorage.getItem('ts_user')); } catch { return null; } }
+
+function decodeToken(token) {
+  try {
+    const payload = token.split('.')[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpired(token) {
+  const decoded = decodeToken(token);
+  if (!decoded || !decoded.exp) return true;
+  return decoded.exp * 1000 < Date.now();
+}
 
 async function apiCall(endpoint, body = {}, method = 'POST') {
   try {
@@ -28,45 +43,44 @@ async function apiCall(endpoint, body = {}, method = 'POST') {
     return { ok: res.ok, data, status: res.status };
   } catch (err) {
     console.error('API call failed:', err);
-    return { ok: false, data: { error: 'Cannot reach server. Make sure Flask is running on port 5000.' } };
+    return { ok: false, data: { error: 'Cannot reach server. Make sure Flask is running.' } };
   }
 }
 
+
 async function requireAuth(redirectIfAdmin = false) {
   const token = getToken();
-  if (!token) { window.location.href = 'login.html'; return null; }
-
-  const res = await fetch(`${API_BASE}/api/status`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  const data = await res.json();
-
-  if (!data.authenticated) {
+  if (!token || isTokenExpired(token)) {
     removeToken();
     window.location.href = 'login.html';
     return null;
   }
-  if (redirectIfAdmin && data.is_admin) {
+  const decoded = decodeToken(token);
+  if (!decoded) {
+    removeToken();
+    window.location.href = 'login.html';
+    return null;
+  }
+  if (redirectIfAdmin && decoded.is_admin) {
     window.location.href = 'admin.html';
     return null;
   }
-  return data;
+  return decoded;
 }
 
 async function requireAdmin() {
   const token = getToken();
-  if (!token) { window.location.href = 'login.html'; return null; }
-
-  const res  = await fetch(`${API_BASE}/api/status`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  const data = await res.json();
-
-  if (!data.authenticated || !data.is_admin) {
+  if (!token || isTokenExpired(token)) {
+    removeToken();
     window.location.href = 'login.html';
     return null;
   }
-  return data;
+  const decoded = decodeToken(token);
+  if (!decoded || !decoded.is_admin) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  return decoded;
 }
 
 async function doLogout() {
