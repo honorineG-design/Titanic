@@ -4,7 +4,7 @@ const IS_LOCAL = window.location.hostname === 'localhost' ||
 
 const API_BASE = IS_LOCAL
   ? 'http://127.0.0.1:5000'
-  : 'https://titanic-production-ffa9.up.railway.app';
+  : 'https://titanic-l2cj.onrender.com';
 
 console.log('API_BASE:', API_BASE);
 
