@@ -26,6 +26,8 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 ALLOWED_ORIGINS = [
     'http://localhost:5500',
     'http://127.0.0.1:5500',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
     'null',
     'https://honorineg-design.github.io',
     os.environ.get('FRONTEND_URL', ''),
@@ -101,8 +103,10 @@ def admin_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
-MODEL_PATH   = os.path.join(os.path.dirname(__file__), 'models', 'titanic_model.pkl')
-ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'models', 'sex_encoder.pkl')
+
+BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH   = os.path.join(BASE_DIR, 'models', 'titanic_model.pkl')
+ENCODER_PATH = os.path.join(BASE_DIR, 'models', 'sex_encoder.pkl')
 model        = None
 sex_encoder  = None
 
@@ -111,9 +115,12 @@ def load_model():
     try:
         model       = joblib.load(MODEL_PATH)
         sex_encoder = joblib.load(ENCODER_PATH)
-        print('Model loaded successfully')
+        print('✓ Model loaded successfully from', MODEL_PATH)
     except Exception as e:
-        print(f' Model not found: {e}. Run training/train_model.py first.')
+        print(f'⚠ Model not found: {e}')
+        print(f'  Expected at: {MODEL_PATH}')
+        print(f'  Run train_model.py first, then place .pkl files in a "models/" folder next to app.py')
+
 
 
 @app.route('/api/register', methods=['POST'])
@@ -179,7 +186,7 @@ def status():
 @token_required
 def predict(current_user):
     if model is None:
-        return jsonify({'error': 'Model not loaded. Run train_model.py first.'}), 503
+        return jsonify({'error': 'Model not loaded. Run train_model.py first and place .pkl files in models/ folder.'}), 503
     data = request.get_json()
     try:
         sex_encoded  = sex_encoder.transform([data['sex']])[0]
@@ -290,12 +297,11 @@ def admin_clear_predictions(current_user):
     db.session.commit()
     return jsonify({'message': 'All predictions cleared'})
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        load_model()
-    app.run(debug=True, port=5000)
+
 
 with app.app_context():
     db.create_all()
     load_model()
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)

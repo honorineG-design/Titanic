@@ -1,4 +1,12 @@
-const API_BASE = 'https://titanic-production-ffa9.up.railway.app';
+const IS_LOCAL = window.location.hostname === 'localhost' ||
+                 window.location.hostname === '127.0.0.1' ||
+                 window.location.protocol === 'file:';
+
+const API_BASE = IS_LOCAL
+  ? 'http://127.0.0.1:5000'
+  : 'https://titanic-production-ffa9.up.railway.app';
+
+console.log('API_BASE:', API_BASE);
 
 function getToken()        { return localStorage.getItem('ts_token'); }
 function setToken(t)       { localStorage.setItem('ts_token', t); }
@@ -19,7 +27,8 @@ async function apiCall(endpoint, body = {}, method = 'POST') {
     const data = await res.json();
     return { ok: res.ok, data, status: res.status };
   } catch (err) {
-    return { ok: false, data: { error: 'Cannot reach server. Is Flask running?' } };
+    console.error('API call failed:', err);
+    return { ok: false, data: { error: 'Cannot reach server. Make sure Flask is running on port 5000.' } };
   }
 }
 
